@@ -84,6 +84,7 @@ SRC_FILES += \
 
 # Required Embedded Planet Source Files
 SRC_FILES += \
+  ../source/cellularTask.c \
   ../source/main.c \
 
 # Include folders common to all targets

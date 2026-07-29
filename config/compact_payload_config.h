@@ -41,7 +41,7 @@
 #endif
 /* *INDENT-ON* */
 
-#define EPCP_VERSION 0x04   /** < EP Compact Payload V3 */
+#define EPCP_VERSION 0x08   /** < EP Compact Payload V8 */
 
 /**
  * @brief Sensor ID Numbers
@@ -59,11 +59,12 @@ typedef enum epcp_sensor_id{
     //0x03 - 0x04 reserved for future use
     EPCP_CELL       = 0x05,
     EPCP_GNSS       = 0x06,
-    EPCP_SI7021     = 0x07,
-    EPCP_BME680     = 0x08,
-    EPCP_ICM20602   = 0x09,
-    EPCP_LSM9DS1    = 0x0A,
-    EPCP_VL53L0X    = 0x0B,
+    EPCP_GTP        = 0x07,
+    EPCP_SI7021     = 0x08,
+    EPCP_BME680     = 0x09,
+    EPCP_ICM20602   = 0x0A,
+    EPCP_LSM9DS1    = 0x0B,
+    EPCP_VL53L0X    = 0x0C,
     //0x0E - 0x1F reserved for future use
     /*Customer Sensors (starting at 0x20 through 0x7E) */
     //0x7F reserved for future use
@@ -77,15 +78,18 @@ typedef enum epcp_sensor_id{
  * P399x024.
  */
 typedef enum epcp_sensor_packet_size{
-    EPCP_SYSTEM_SIZE   = 19,
-    EPCP_SYSTEM_V2_SIZE    = 9,
+    EPCP_SYSTEM_SIZE        = 19,
+    EPCP_SYSTEM_V2_SIZE     = 9,
     EPCP_CELL_SIZE          = 10,
-    EPCP_GNSS_SIZE          = 7,
+    EPCP_GNSS_SIZE          = 10,
+    EPCP_GTP_SIZE           = 13,
     EPCP_SI7021_SIZE        = 6,
     EPCP_BME680_SIZE        = 25,
     EPCP_ICM20602_SIZE      = 14,
     EPCP_LSM9DS1_SIZE       = 21,
     EPCP_VL53L0X_SIZE       = 6,
+    //EPCP_CE_SIZE          = xx Connected Equipment size is determined dynamically
+    EPCP_COACH_SIZE         = 9
 } EPCP_SENSOR_PACKET_SIZE;
 
 /** 
@@ -109,8 +113,12 @@ typedef enum epcp_sensor_slot_type{
     EPCP_ICCID,         //Cell ICCID
     EPCP_RSSI,          //Cell RSSI
     EPCP_RSRQ,          //Cell RSRQ
+    EPCP_SAT,           //GNSS Satellites
     EPCP_LAT,           //GNSS Latitude
     EPCP_LON,           //GNSS Longitude
+    EPCP_GTP_LAT,       //GPT Latitidue
+    EPCP_GTP_LON,       //GPT Longitude
+    EPCP_GTP_ACC,       //GTP Accuracy
     EPCP_TIME,          //System time or run time
     EPCP_BATT,          //Battery voltage
     EPCP_TEMP,          //Temperature reading

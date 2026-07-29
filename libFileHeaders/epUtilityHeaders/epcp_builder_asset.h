@@ -57,6 +57,7 @@ typedef struct{
     epcp_sensor systemV2;
     epcp_sensor cell;
     epcp_sensor gnss;
+    epcp_sensor gtp;
     epcp_sensor si7021;
     epcp_sensor bme680;
     epcp_sensor icm20602;
@@ -66,9 +67,9 @@ typedef struct{
     //Sensor subpacket enables.
     bool system_active;
     bool systemV2_active;
-    bool coach_active;
     bool cell_active;
     bool gnss_active;
+    bool gtp_active;
     bool si7021_active;
     bool bme680_active;
     bool icm20602_active;
