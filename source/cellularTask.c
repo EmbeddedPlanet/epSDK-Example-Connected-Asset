@@ -295,26 +295,3 @@ void CellularTask( void * pvParameters )
     }
     vTaskDelete( NULL );
 }
-
-/*-----------------------------------------------------------*/
-void mqttTask( void * pvParameters )
-{
-    for(;;)
-    {
-        /* Periodically check status to see if mqtt connection can be closed */
-        CellStatus_t ret = statusMQTTCellular(IOT_BROKER_ADDRESS_POST);
-
-        /* If Success then close, otherwise wait and check again */
-        if( ret == CellSuccess ){
-            DBGI("MQTT ready to be closed");
-            if( closeMQTTCellular() != CellSuccess){
-                DBGE("Fail to close MQTT connection");
-            }
-            /* Suspend task */
-            vTaskSuspend( NULL );
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(10000));    
-    }
-    vTaskDelete( NULL );
-}

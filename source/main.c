@@ -1,19 +1,3 @@
-/****************************************************************************                                                                     *
- * Copyright (c) 2026 Embedded Planet, Inc.                                 *
- * SPDX-License-Identifier: Apache-2.0                                      *
- *                                                                          *
- * Licensed under the Apache License, Version 2.0 (the "License");          *
- * you may not use this file except in compliance with the License.         *
- * You may obtain a copy of the License at                                  *
- *                                                                          *
- *     http://www.apache.org/licenses/LICENSE-2.0                           *
- *                                                                          *
- * Unless required by applicable law or agreed to in writing, software      *
- * distributed under the License is distributed on an "AS IS" BASIS,        *
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. *
- * See the License for the specific language governing permissions and      *
- * limitations under the License.                                           *
- ****************************************************************************/
 /**
  * Created on: Sept 1, 2022
  * Created by: golobmichael
@@ -41,7 +25,6 @@
 #include "nordic_common.h"
 #include "nrf.h"
 #include "app_error.h"
-#include "nrf_crypto.h"
 #include "nrf_sdh.h"
 #include "nrf_sdh_soc.h"
 #include "nrf_sdh_freertos.h"
@@ -49,8 +32,10 @@
 #include "fds.h"
 #include "nrf_drv_clock.h"
 #include "uart_helper.h"
-#include "cell_helper.h"
+#include "cellular_me310.h"
 #include "htu21d.h"
+#include "vl53l0x.h"
+#include "bme680.h"
 #include "icm20602.h"
 #include "qspi_helper.h"
 #include "epcp_builder_asset.h"
@@ -59,6 +44,11 @@
 #if defined(THINGSBOARD_HTTPS_INTEGRATION) || defined(AZURE_MQTTS_X509) || defined(AWS_MQTTS_X509) || defined(AWS_HTTPS_X509) || defined(AZURE_MQTTS_SAS) || defined(AZURE_HTTPS_SAS)
 #include "nrf_crypto.h"
 #endif
+//Activate / deactivate onboard sensors
+#define SI7021_ACTIVE   0
+#define VL53L0X_ACTIVE  0
+#define BME680_ACTIVE   0
+#define ICM20602_ACTIVE 0
 
 SemaphoreHandle_t cellularSemaphore;
 SemaphoreHandle_t dataReadySemaphore;
@@ -67,6 +57,7 @@ QueueHandle_t xCellQueue;
 SemaphoreHandle_t xSensPwrEnSemaphore;
 
 #define mainLED_TASK_STACK_SIZE             128
+#define MQTT_TASK_STACK_SIZE                1024
 #define mainCell_TASK_STACK_SIZE            8196
 #define DEAD_BEEF                           0xDEADBEEF                              /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 #define OSTIMER_WAIT_FOR_QUEUE              2                                       /**< Number of ticks to wait for the timer queue to be ready */
@@ -83,8 +74,7 @@ static uint8_t frameCounter = 0;
 /* Cellular Transmission Interval */
 static uint32_t cellTransInt = MIN_TRANS_INTERVAL;
 
-/* Sensor power enable is required */
-#define SENSOR_PWR_ENABLE NRF_GPIO_PIN_MAP(0, 31)
+system_info_struct system_info;
 
 /* TWI instance ID. */
 #define TWI_INSTANCE_ID 0
@@ -94,8 +84,7 @@ static const nrfx_twi_t twi = NRFX_TWI_INSTANCE(TWI_INSTANCE_ID);
 
 /* Initial PDP config */
 CellularBLEConfig_t pdnConfig = { '\0' };
-
-system_info_struct system_info;
+CellularBLEConfig_t pdnConfigDefault = { '\0' };
 
 /* TWI initialization */
 void twi_init (void)
@@ -122,13 +111,12 @@ void sensorSampleTask(void *pvParameters);
 /* Miscellaneous initialization including preparing the logging and cell. */
 static void prvMiscInitialization( void );
 
-/* Helper function for making received Asset version numbers more readable */
+/* Helper function for making received Agora version numbers more readable */
 static void parse_version(char* version, char* conv_fw_ver);
 
 TaskHandle_t ledTaskHandle;
 TaskHandle_t cellularTaskHandle;
 TaskHandle_t sensorSampleTaskHandle;
-TaskHandle_t mqttTaskHandle;
 
 /*-----------------------------------------------------------*/
 static void LEDTask( void * pvParameters )
@@ -166,7 +154,7 @@ void sensorPwrEnConfig( bool status )
     if(init)
     {
         xSensPwrEnSemaphore = xSemaphoreCreateBinary();
-        nrf_gpio_cfg_output(SENSOR_PWR_ENABLE);
+        //nrf_gpio_cfg_output(PIN_NAME_SENSOR_POWER_ENABLE);
         //Clear flag
         init = false;
     }
@@ -187,14 +175,14 @@ void sensorPwrEnConfig( bool status )
         //If counter is now 0, then disable
         if(counter == 0)
         {
-            nrf_gpio_pin_clear(SENSOR_PWR_ENABLE);
+            //nrf_gpio_pin_clear(PIN_NAME_SENSOR_POWER_ENABLE);
         }
     }
 
     //If status is true then set pin and increase counter
     if(status == true)
     {
-        nrf_gpio_pin_set(SENSOR_PWR_ENABLE);
+        //nrf_gpio_pin_set(PIN_NAME_SENSOR_POWER_ENABLE);
         if(counter < 0xFF)
         {
             counter++;
@@ -270,7 +258,7 @@ static void prvMiscInitialization( void )
         system_info.updateVerMaj = ( ( xDescriptor.updateVersion >> 24 ) & 0xFF );
         system_info.updateVerMin = ( ( xDescriptor.updateVersion >> 16 ) & 0xFF );
         system_info.updateVerBui = ( xDescriptor.updateVersion & 0xFFFF );
-        sprintf( system_info.updateVerStr,"%02d.%02d.%02ld", system_info.updateVerMaj, system_info.updateVerMin, system_info.updateVerBui );
+        sprintf( system_info.updateVerStr,"%02x.%02x.%02x", system_info.updateVerMaj, system_info.updateVerMin, system_info.updateVerBui );
     }
     else
     {
@@ -279,7 +267,7 @@ static void prvMiscInitialization( void )
         system_info.updateVerMin = VERSION_MINOR;
         system_info.updateVerBui = VERSION_BUILD;
         /* Set string version */
-        sprintf( system_info.updateVerStr,"%02d.%02d.%02ld", system_info.updateVerMaj, system_info.updateVerMin, system_info.updateVerBui );
+        sprintf( system_info.updateVerStr,"%02x.%02x.%02x", system_info.updateVerMaj, system_info.updateVerMin, system_info.updateVerBui );
     }
 
     /* Read production table in external flash */
@@ -302,6 +290,22 @@ static void prvMiscInitialization( void )
             DBGE("Invalid Production Table, Programming Defaults");
         }
     }
+
+    /* Read ble settings table in external flash */
+    err_code = qspi_read( (uint8_t * ) &pdnConfig, sizeof(pdnConfig), otapal_BLE_TBL_START );
+    /* If error or invalid then use defaults */
+    //if( err_code != NRFX_SUCCESS )
+    //{
+    //    DBGE( "BLE Settings Table read failed with with error code %d", err_code );
+
+        strncpy(pdnConfig.apnName, pdnConfigDefault.apnName, sizeof(pdnConfigDefault.apnName));
+    //    DBGI("Resetting to defaults: APN: %s", pdnConfig.apnName);
+    //}
+    //else
+    //{
+        /* Display values read */
+        DBGI("Cell APN: %s, %d", pdnConfig.apnName, strlen(pdnConfig.apnName));
+    //}
 
     DBGI("******************************************************");
     DBGI("*       Embedded Planet: CONNECTED ASSET v%s    *", system_info.updateVerStr);
@@ -356,19 +360,6 @@ static void prvMiscInitialization( void )
     }
     #endif
 
-    #if defined(AZURE_MQTTS_X509) || defined(AWS_MQTTS_X509)|| defined(AZURE_MQTTS_SAS)
-    //If protocol is MQTT and persistent then create task to manage connection
-    if( PERSISTENT_CONNECT_FLAG == false )
-    {
-        xTaskCreate( mqttTask,
-                    "mqttTask",
-                    MQTT_TASK_STACK_SIZE,
-                    NULL,
-                    tskIDLE_PRIORITY+2,
-                    &mqttTaskHandle );
-    }
-    #endif
-
     /* Create the task to run tests. */
     xTaskCreate( CellularTask,
                 "CellularTask",
@@ -376,12 +367,11 @@ static void prvMiscInitialization( void )
                 NULL,
                 tskIDLE_PRIORITY+2,
                 &cellularTaskHandle );
-#endif  
+#endif     
 
     qspi_uninit();
 
-    // Low power not enabled at this time, reach out to EP to discuss enabling
-    uninit_uart(MAIN_LOOP); //comment out to prevent sleep
+    //uninit_uart(MAIN_LOOP); //comment out to prevent sleep
 }
 
 /* Waits for the semaphore that is given by sensor_sample_callback. Retrieves latest local sensor data and adds to cell queue */
@@ -394,6 +384,9 @@ void sensorSampleTask(void *pvParameters)
     vTaskDelay(pdMS_TO_TICKS(20));
 
     // Sensor Initialize
+    #if BME680_ACTIVE
+    bme680_init(twi, BSEC_SAMPLE_RATE_LP, 0.0f);
+    #endif
     #if ICM20602_ACTIVE
     icm20602_init(&icm, ICM20602_ADDR_LOW, twi);
     #endif
@@ -434,10 +427,11 @@ void sensorSampleTask(void *pvParameters)
         DBGI("IMEI received");
 
         uint64_t ts = get_time_s();
+        DBGE("TIME:%llu",ts);
 
         //Increment frame counter or roll over if needed
         frameCounter = (uint8_t) (frameCounter + 1);
-        
+
         #if SI7021_ACTIVE
         htu21_init(twi);
         err = htu21_is_connected();
@@ -447,41 +441,65 @@ void sensorSampleTask(void *pvParameters)
         float si_temp, si_hum;
         htu21_read_temperature_and_relative_humidity(&si_temp, &si_hum);
         #endif
+        
+        #if BME680_ACTIVE
+        bme680_sensor_data bme_data;
+
+        //Get new BME680 data if available
+        if(xSemaphoreTake(xBme680DataReadySemaphore, pdMS_TO_TICKS(5000))){
+            bme_data = bme680_get_latest_data();
+        }else{
+            DBGI("BME680 data not available!");
+        }
+        #endif
 
         #if ICM20602_ACTIVE
         icm20602_sensor_data icm_data;
 
         //Get new ICM20602 data if available
-        bool icm_data_ready = icm20602_data_ready(&icm, &err);
+        int error;
+        bool icm_data_ready = icm20602_data_ready(&icm, &error);
         if(icm_data_ready){
-            icm_data = icm20602_get_data(&icm, &err); 
+            icm_data = icm20602_get_data(&icm, &error); 
         }else{
-            DBGE("icm20602 err: %x\r\n", err);
+            DBGE("icm20602 error: %x\r\n", error);
         }
+        #endif
+
+        #if VL53L0X_ACTIVE
+        VL53L0X tof;
+        err = vl53l0x_init(&tof, twi);
+        if(err != NRFX_SUCCESS){
+            DBGE("VL53L0X init error!");
+        }
+        //Set the tof timing budget to 200ms
+        setMeasurementTimingBudget(&tof, 200000);
         #endif
 
         //Set up compact payload
         epcp_builder_asset asset_compact_payload;
         epcp_builder_asset_init(&asset_compact_payload);
 
+        //Set up data converter
+        union epcp_convert_type ct;
+
         //Add System data to subpacket
         //Convert battery from float to int per spec
-        uint32_t batVolt = ep_bsp_read_battery_voltage() * 100;
-        uint8_t epcpVer = EPCP_VERSION;
+        ct.ui32 = ep_bsp_read_battery_voltage() * 100;
         if(frameCounter == 1){
-            asset_add_data(&asset_compact_payload, EPCP_SYSTEM, EPCP_VER, &epcpVer);
+            asset_add_data(&asset_compact_payload, EPCP_SYSTEM, EPCP_VER, &epcp_ver);
             asset_add_data(&asset_compact_payload, EPCP_SYSTEM, EPCP_FW_MAJOR, &system_info.updateVerMaj);
             asset_add_data(&asset_compact_payload, EPCP_SYSTEM, EPCP_FW_MINOR, &system_info.updateVerMin);
             asset_add_data(&asset_compact_payload, EPCP_SYSTEM, EPCP_FW_PATCH, &system_info.updateVerBui);
             asset_add_data(&asset_compact_payload, EPCP_SYSTEM, EPCP_MSG_CNT, &frameCounter);
             asset_add_data(&asset_compact_payload, EPCP_SYSTEM, EPCP_SN, system_info.ep_serial);
             asset_add_data(&asset_compact_payload, EPCP_SYSTEM, EPCP_TIME, &ts);
-            asset_add_data(&asset_compact_payload, EPCP_SYSTEM, EPCP_BATT, &batVolt);
+            asset_add_data(&asset_compact_payload, EPCP_SYSTEM, EPCP_BATT, &(ct.ui32));
         }else{
-            asset_add_data(&asset_compact_payload, EPCP_SYSTEM_V2, EPCP_VER, &epcpVer);
+            asset_add_data(&asset_compact_payload, EPCP_SYSTEM_V2, EPCP_VER, &epcp_ver);
             asset_add_data(&asset_compact_payload, EPCP_SYSTEM_V2, EPCP_MSG_CNT, &frameCounter);
             asset_add_data(&asset_compact_payload, EPCP_SYSTEM_V2, EPCP_TIME, &ts);
-            asset_add_data(&asset_compact_payload, EPCP_SYSTEM_V2, EPCP_BATT, &batVolt);
+            asset_add_data(&asset_compact_payload, EPCP_SYSTEM_V2, EPCP_BATT, &(ct.ui32));
         }
 
         //Add Cell data to subpacket
@@ -494,32 +512,61 @@ void sensorSampleTask(void *pvParameters)
         #if SI7021_ACTIVE
         //Add HTU21D / SI7021 data to subpacket
         //Convert TEMP to int per spec
-        int32_t tempSi = si_temp * 100;
-        asset_add_data(&asset_compact_payload, EPCP_SI7021, EPCP_TEMP, &tempSi);
+        ct.i32 = si_temp * 100;
+        asset_add_data(&asset_compact_payload, EPCP_SI7021, EPCP_TEMP, &(ct.ui32));
         //Convert HUM to int per spec
-        int32_t humiditySi = si_hum * 100;
-        asset_add_data(&asset_compact_payload, EPCP_SI7021, EPCP_HUM, &humiditySi);
+        ct.i32 = si_hum * 100;
+        asset_add_data(&asset_compact_payload, EPCP_SI7021, EPCP_HUM, &(ct.ui32));
+        #endif
+
+        #if BME680_ACTIVE
+        //Convert data from to int per spec and add to BME subpacket
+        ct.i32 = bme_data.temp * 100;
+        asset_add_data(&asset_compact_payload, EPCP_BME680, EPCP_TEMP, &(ct.ui32));
+        ct.i32 = bme_data.raw_pressure * 100;
+        asset_add_data(&asset_compact_payload, EPCP_BME680, EPCP_PRES, &(ct.ui32));
+        ct.ui32 = bme_data.humidity * 100;
+        asset_add_data(&asset_compact_payload, EPCP_BME680, EPCP_HUM, &(ct.ui32));
+        ct.ui32 = bme_data.raw_gas * 100;
+        asset_add_data(&asset_compact_payload, EPCP_BME680, EPCP_GAS, &(ct.ui32));
+        ct.ui32 = bme_data.co2_equivalent * 100;
+        asset_add_data(&asset_compact_payload, EPCP_BME680, EPCP_CO2, &(ct.ui32));
+        ct.ui32 = bme_data.breath_voc_equivalent * 100;
+        asset_add_data(&asset_compact_payload, EPCP_BME680, EPCP_BREATH, &(ct.ui32));
+        ct.ui32 = bme_data.iaq;
+        asset_add_data(&asset_compact_payload, EPCP_BME680, EPCP_IAQ_SCORE, &(ct.ui32));
+        ct.ui32 = bme_data.iaq_accuracy;
+        asset_add_data(&asset_compact_payload, EPCP_BME680, EPCP_IAQ_ACCURACY, &(ct.ui32));
         #endif
 
         #if ICM20602_ACTIVE
         //Convert data from float to int per spec and add to ICM subpacket
-        int32_t accelX = icm_data.accel_x * 100;
-        asset_add_data(&asset_compact_payload, EPCP_ICM20602, EPCP_ACCEL_X, &accelX);
-        int32_t accelY = icm_data.accel_y * 100;
-        asset_add_data(&asset_compact_payload, EPCP_ICM20602, EPCP_ACCEL_Y, &accelY);
-        int32_t accelZ = icm_data.accel_z * 100;
-        asset_add_data(&asset_compact_payload, EPCP_ICM20602, EPCP_ACCEL_Z, &accelZ);
-        int32_t gyroX = icm_data.gyro_x * 100;
-        asset_add_data(&asset_compact_payload, EPCP_ICM20602, EPCP_GYRO_X, &gyroX);
-        int32_t gyroY = icm_data.gyro_y * 100;
-        asset_add_data(&asset_compact_payload, EPCP_ICM20602, EPCP_GYRO_Y, &gyroY);
-        int32_t gyroZ = icm_data.gyro_z * 100;
-        asset_add_data(&asset_compact_payload, EPCP_ICM20602, EPCP_GYRO_Z, &gyroZ);
+        ct.i32 = icm_data.accel_x * 100;
+        asset_add_data(&asset_compact_payload, EPCP_ICM20602, EPCP_ACCEL_X, &(ct.ui32));
+        ct.i32 = icm_data.accel_y * 100;
+        asset_add_data(&asset_compact_payload, EPCP_ICM20602, EPCP_ACCEL_Y, &(ct.ui32));
+        ct.i32 = icm_data.accel_z * 100;
+        asset_add_data(&asset_compact_payload, EPCP_ICM20602, EPCP_ACCEL_Z, &(ct.ui32));
+        ct.i32 = icm_data.gyro_x * 100;
+        asset_add_data(&asset_compact_payload, EPCP_ICM20602, EPCP_GYRO_X, &(ct.ui32));
+        ct.i32 = icm_data.gyro_y * 100;
+        asset_add_data(&asset_compact_payload, EPCP_ICM20602, EPCP_GYRO_Y, &(ct.ui32));
+        ct.i32 = icm_data.gyro_z * 100;
+        asset_add_data(&asset_compact_payload, EPCP_ICM20602, EPCP_GYRO_Z, &(ct.ui32));
         #endif
-                    
-        // Generate completed packet
+
+        #if VL53L0X_ACTIVE
+        //Convert measurement to int per spec and add to TOF subpacket
+        ct.ui32 = vl53l0x_get_data(&tof, &err);
+        if(err != NRFX_SUCCESS){
+            DBGE("VL53L0X init error!");
+        }
+        asset_add_data(&asset_compact_payload, EPCP_VL53L0X, EPCP_DIST, &(ct.ui32));
+        #endif
+
+        //Generate completed packet
         cell_queue_msg local_sensor_data_msg;
-        local_sensor_data_msg.size = asset_get_packet(&asset_compact_payload, local_sensor_data_msg.data);
+        local_sensor_data_msg.size = asset_get_packet(&asset_compact_payload, local_sensor_data_msg.data);        
 
         #if CELLULAR_ACTIVE
         //Forward data to cell queue if there is space
@@ -529,19 +576,11 @@ void sensorSampleTask(void *pvParameters)
 
         // Set flag
         newDataAdded = true;
-
-        // Resume mqtt task
-        if(strstr( IOT_BROKER_ADDRESS_POST, "mqtt" ) != NULL && PERSISTENT_CONNECT_FLAG != true){
-            vTaskResume( mqttTaskHandle );
-        }
         #endif
 
         parse_downlink();
 
         epcp_builder_asset_deinit(&asset_compact_payload);
-
-        // Monitor FreeRTOS stack usage
-        DBGI("FreeRTOS Heap Remaining: %d Bytes", xPortGetFreeHeapSize());
 
         uninit_uart(TASK_1);
         vTaskDelay(pdMS_TO_TICKS(cellTransInt * 1000));

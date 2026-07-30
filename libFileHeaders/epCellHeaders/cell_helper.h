@@ -1,5 +1,5 @@
 /****************************************************************************                                                                     *
- * Copyright (c) 2026 Embedded Planet, Inc.                                 *
+ * Copyright (c) 2023 Embedded Planet, Inc.                                 *
  * SPDX-License-Identifier: Apache-2.0                                      *
  *                                                                          *
  * Licensed under the Apache License, Version 2.0 (the "License");          *
@@ -511,20 +511,6 @@ extern CellStatus_t azureRegenerateSaSToken(uint8_t *endpointAddr, uint32_t expi
  * @return N/A.
  */
 extern void runAzureMqttTlsTask( uint8_t *endpointAddr, uint8_t *pathPrefix, uint8_t* pathSuffix, bool tokenInPath, uint8_t securityType, bool persistent, uint32_t gnssInterval, uint32_t gnssTimeout, bool gnssStatus );
-
-/**
- * @brief Close non persistent mqtt cell connection
- * 
- * @return enum return.
- */
-extern CellStatus_t closeMQTTCellular( void );
-
-/**
- * @brief Get MQTT Connection status
- * 
- * @return enum return.
- */
-extern CellStatus_t statusMQTTCellular( uint8_t *endpointAddr );
 
 /**
  * @brief Query cellular diagnostics
