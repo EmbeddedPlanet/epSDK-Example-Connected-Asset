@@ -29,3 +29,6 @@ The epSDK User Guide and Connected Asset User Guide can be found on the [EP Docu
 
 ## Getting Started
 Set up the environment as described in the epSDK User Guide.
+
+## Embedded Planet Documentation Control System 
+Archived under P37300000000096
