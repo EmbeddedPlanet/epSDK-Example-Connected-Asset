@@ -22,7 +22,7 @@ Users will receive a slightly modified NRF SDK that must be located on the same 
 
 ## License
 
-The software is provided under the [Apache-2.0 license](LICENSE-apache-2.0.txt).
+The software is provided under the [Apache-2.0 license](LICENSE).
 
 ## Documentation
 The epSDK User Guide and Connected Asset User Guide can be found on the [EP Documents Page][ep-doc-link]
