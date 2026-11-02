@@ -1,3 +1,19 @@
+/****************************************************************************                                                                     *
+ * Copyright (c) 2026 Embedded Planet, Inc.                                 *
+ * SPDX-License-Identifier: Apache-2.0                                      *
+ *                                                                          *
+ * Licensed under the Apache License, Version 2.0 (the "License");          *
+ * you may not use this file except in compliance with the License.         *
+ * You may obtain a copy of the License at                                  *
+ *                                                                          *
+ *     http://www.apache.org/licenses/LICENSE-2.0                           *
+ *                                                                          *
+ * Unless required by applicable law or agreed to in writing, software      *
+ * distributed under the License is distributed on an "AS IS" BASIS,        *
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. *
+ * See the License for the specific language governing permissions and      *
+ * limitations under the License.                                           *
+ ****************************************************************************/
 /**
  * Created on: Sept 1, 2022
  * Created by: golobmichael
@@ -7,7 +23,7 @@
  * This source file is private and confidential.
  * Unauthorized copying of this file is strictly prohibited.
  * 
- * Version 1.0 - 01SEPT22  Initial, ported from: https://github.com/EmbeddedPlanet/nrf_sdk_17_1/tree/master/examples/ble_peripheral/ble_app_hrs_freertos, golobmichael
+ * Version 1.0 - 01SEPT22  Initial
  */
 #ifndef __MAIN_H__
 #define __MAIN_H__
@@ -22,16 +38,13 @@
 #include <string.h>
 #include <stdbool.h>
 
-#include "FreeRTOS.h"
-#include "task.h"
-
 /* General defines */
 
 /* Version needs to be defined as string and ints */
-#define VERSION_NUM                         "00.00.06"                                   /**< Version. Will be passed to Device Information Service. */
+#define VERSION_NUM                         "0.00.03"                                   /**< Version. Will be passed to Device Information Service. */
 #define VERSION_MAJOR                       0
 #define VERSION_MINOR                       0
-#define VERSION_BUILD                       6
+#define VERSION_BUILD                       3
 
 /* Length of EP serial number is 6 characters */
 #define SERIAL_LENGTH   6
@@ -114,20 +127,20 @@ extern system_info_struct system_info;
 #define MODEM_SLEEP_STATE   MODEM_OFF
 
 /* Enable GTP Location Functional */
-#define GTP_STATUS          true
+#define GTP_STATUS          false
 
 /* MQTT Persistent Connection Flag */
 #define PERSISTENT_CONNECT_FLAG     false   // false: disconnect with empty queue, true: maintain connection
 
 /* Select option for server, uncomment one of the following. Contact EP for additional options */
-//#define THINGSBOARD_HTTP_INTEGRATION    // Send to ThingsBoard HTPP Integration server
+#define THINGSBOARD_HTTP_INTEGRATION    // Send to ThingsBoard HTPP Integration server
 //#define THINGSBOARD_HTTPS_INTEGRATION     // Send to ThingsBoard HTTPs Integration server
 //#define THINGSBOARD_COAP_INTEGRATION    // Send to ThingsBoard CoAP Integration server
 //#define THINGSBOARD_COAPS_INTEGRATION   // Send to ThingsBoard CoAP w/ dtls Integration server, coap w/dtls not currently supported, contact EP to discuss
 //#define AWS_HTTPS_X509                   // Send to AWS IoT Core over HTTP using X509 certificates
 //#define AWS_MQTTS_X509                   // Send to AWS IoT Core over MQTT using X509 certificates
 //#define AZURE_MQTTS_X509                 // Send to Azure Event Grid over MQTT using X509 certificates
-#define AZURE_MQTTS_SAS                 // Send to Azure IoT Hub over MQTT using SaS tokens
+//#define AZURE_MQTTS_SAS                 // Send to Azure IoT Hub over MQTT using SaS tokens
 //#define AZURE_HTTPS_SAS                 // Send to Azure IoT Hub over HTTP using SaS tokens
 
 /* Both addresses below must be the same protocol for now */

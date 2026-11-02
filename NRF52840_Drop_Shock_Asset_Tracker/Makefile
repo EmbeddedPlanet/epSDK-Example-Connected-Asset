@@ -176,7 +176,7 @@ INC_FOLDERS += \
 # Libraries common to all targets
 LIB_FILES += \
   $(SDK_ROOT)/external/nrf_cc310/lib/cortex-m4/hard-float/libnrf_cc310_0.9.13.a \
-  ../libFiles/epCALibrary.a \
+  ../libFiles/epCALibrary_V00.00.03.a \
 
 # Required Embedded Planet Source Files
 INC_FOLDERS += \
